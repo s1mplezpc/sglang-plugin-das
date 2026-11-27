@@ -4985,3 +4985,15 @@ audio Q、video Q、video MLP up 三种权重形状和合成 FP8 数据从空缓
 一致，NaN 位置一致。`2**31` 元素的最后一块也通过同一参考检查。
 独立反量化调用的 `torch.compile(fullgraph=True)` 三组尺寸对拍通过。
 本轮验证覆盖算子数值、JIT 复用和编译冒烟，整模型冷启动与端到端性能沿用此前各自的测量记录。
+
+
+## 2026-11-27 HCU SageAttention 可选后端
+
+基于 release `320be363`，通过已有平台选择 Hook 接入 HCU Sage 原生
+`forward` / packed-varlen；缺包或缺 API 时警告并沿用默认后端，
+内部依赖与 kernel 错误继续抛出。非 Sage 路径不导入 Sage，不新增必装依赖。
+head size/dtype 由 Sage 原生校验；当前原生支持 D128，不支持 Ring rotation。
+只处理重复空段边界，保留非空 padding，并兼容 Tensor/tuple 返回。
+本提交不修改 FA，也不包含测试文件；安装及回退见[安装说明](installation.md#hcu-sageattention-可选依赖)。
+已执行 CPU 接口回归、L0 和导览检查；GPU 验证使用另行交付的 0.5.18 wheel，
+不将其作为本插件版本的 GPU 或整模型性能结论。

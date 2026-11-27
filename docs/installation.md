@@ -132,6 +132,14 @@ Wan 的 `sla_attn` 默认沿用插件的 `sla_skip_linear=true`：不创建 `pro
 其新增投影参数按社区初始零值物化。该跳过能力限定于 HCU Wan 的普通 SLA，
 不改变其他模型或 SageSLA 的计算。
 
+### HCU SageAttention 可选依赖
+
+默认/FA 路径不导入 Sage，无需额外安装。启用时，在匹配 Python、Torch、
+DTK 的 HCU Sage 源码中执行 `python setup.py bdist_wheel` 并安装 wheel，
+再使用 `--attention-backend sage_attn`。需要 `sageattn` / `sageattn_varlen`
+两个 API；当前支持 FP16/BF16、D128、零 dropout，不支持 Ring rotation。
+缺包或缺 API 时警告并沿用现有默认后端；内部依赖、ABI 和 kernel 错误正常抛出。
+
 wheel 的包应来自 `$SITE/hcu_sglang`，editable 应来自 `$PLUGIN/hcu_sglang`；官方应来自指定 OFFICIAL。再检查实际服务用户的设备权限：
 
 ```bash

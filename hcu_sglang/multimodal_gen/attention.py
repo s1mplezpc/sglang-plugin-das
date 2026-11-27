@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import logging
+from functools import lru_cache
 from typing import Any, Callable
 
 import torch
@@ -11,9 +13,42 @@ import torch
 from hcu_sglang.utils.detection import is_hcu
 
 
+logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=None)
+def _warn_sage_unavailable(reason: str) -> None:
+    logger.warning(
+        "HCU SageAttention is unavailable (%s); using the default attention "
+        "backend. Install the HCU sageattention-das wheel to enable SAGE_ATTN.",
+        reason,
+    )
+
+
+def _hcu_sage_backend() -> str | None:
+    try:
+        sage = importlib.import_module("sageattention")
+    except ModuleNotFoundError as error:
+        if error.name != "sageattention":
+            raise
+        _warn_sage_unavailable("sageattention is not installed")
+        return None
+    if not all(
+        callable(getattr(sage, name, None)) for name in ("sageattn", "sageattn_varlen")
+    ):
+        _warn_sage_unavailable("sageattn/sageattn_varlen API is missing")
+        return None
+    return "hcu_sglang.multimodal_gen.sage_attn.SageAttentionBackend"
+
+
 def around_cuda_backend_selection(
     original: Callable[..., str], cls, selected_backend, head_size: int, dtype
 ) -> str:
+    if is_hcu() and getattr(selected_backend, "name", None) == "SAGE_ATTN":
+        sage_backend = _hcu_sage_backend()
+        if sage_backend is not None:
+            return sage_backend
+        selected_backend = None
     if is_hcu() and getattr(selected_backend, "name", None) == "SLA_ATTN":
         if dtype not in (torch.float16, torch.bfloat16):
             raise ValueError("HCU SLA attention requires fp16 or bf16 inputs.")
@@ -30,6 +65,12 @@ def around_rocm_backend_selection(
     original: Callable[..., str], cls, selected_backend, head_size: int, dtype
 ) -> str:
     backend_name = getattr(selected_backend, "name", None)
+    if is_hcu() and backend_name == "SAGE_ATTN":
+        sage_backend = _hcu_sage_backend()
+        if sage_backend is not None:
+            return sage_backend
+        selected_backend = None
+        backend_name = None
     if is_hcu() and backend_name == "SUBBLOCK_SPARSE_ATTN":
         return (
             "sglang.multimodal_gen.runtime.layers.attention.backends."
